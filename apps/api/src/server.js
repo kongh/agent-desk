@@ -10,7 +10,7 @@ import {
   readWorkspaceFile,
 } from "../../../packages/agent-workspace/src/workspace.js";
 import { createAgentRunner } from "../../../packages/opencode-runner/src/runner-factory.js";
-import { TaskStore } from "./task-store.js";
+import { DEFAULT_PROJECT, TaskStore, createProjectId } from "./task-store.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(__dirname, "../../..");
@@ -45,6 +45,40 @@ export function createApiServer({
         });
       }
 
+      if (request.method === "GET" && url.pathname === "/api/projects") {
+        return sendJson(response, 200, { projects: store.listProjects() });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/projects") {
+        const body = await readJsonBody(request);
+        const name = String(body.name ?? "").trim();
+        if (!name) {
+          return sendJson(response, 400, { error: "项目名称不能为空" });
+        }
+        const id = String(body.id ?? createProjectId(name)).trim();
+        try {
+          const project = store.createProject({ id, name });
+          return sendJson(response, 201, { project });
+        } catch (error) {
+          return sendJson(response, 409, { error: error.message });
+        }
+      }
+
+      const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+      if (request.method === "PATCH" && projectMatch) {
+        const body = await readJsonBody(request);
+        const name = String(body.name ?? "").trim();
+        if (!name) {
+          return sendJson(response, 400, { error: "项目名称不能为空" });
+        }
+        try {
+          const project = store.renameProject(decodeURIComponent(projectMatch[1]), name);
+          return sendJson(response, 200, { project, tasks: store.list() });
+        } catch (error) {
+          return sendJson(response, 404, { error: error.message });
+        }
+      }
+
       if (request.method === "GET" && url.pathname === "/api/tasks") {
         return sendJson(response, 200, { tasks: store.list() });
       }
@@ -53,6 +87,8 @@ export function createApiServer({
         const body = await readJsonBody(request);
         const prompt = String(body.prompt ?? "").trim();
         const agent = String(body.agent ?? "deep-research");
+        const projectId = String(body.projectId ?? DEFAULT_PROJECT.id).trim() || DEFAULT_PROJECT.id;
+        const project = store.listProjects().find((item) => item.id === projectId) ?? DEFAULT_PROJECT;
 
         if (!prompt) {
           return sendJson(response, 400, { error: "任务内容不能为空" });
@@ -63,6 +99,7 @@ export function createApiServer({
           id: `task_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
           prompt,
           agent,
+          project,
           workspace,
           messages: [
             {
@@ -95,6 +132,22 @@ export function createApiServer({
         });
 
         return sendJson(response, 201, { task });
+      }
+
+      const taskRenameMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
+      if (request.method === "PATCH" && taskRenameMatch) {
+        const task = store.get(taskRenameMatch[1]);
+        if (!task) {
+          return sendJson(response, 404, { error: "任务不存在" });
+        }
+
+        const body = await readJsonBody(request);
+        const title = String(body.title ?? "").trim();
+        if (!title) {
+          return sendJson(response, 400, { error: "会话名称不能为空" });
+        }
+
+        return sendJson(response, 200, { task: store.renameTask(task.id, title) });
       }
 
       const taskMessageMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/messages$/);

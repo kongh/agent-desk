@@ -1,4 +1,4 @@
-import type { AgentTask, WorkspaceFile } from "../types";
+import type { AgentProject, AgentTask, WorkspaceFile } from "../types";
 
 type ApiErrorPayload = {
   error?: string;
@@ -20,16 +20,67 @@ export async function listTasks(): Promise<AgentTask[]> {
   return response.ok ? (payload.tasks ?? []) : [];
 }
 
-export async function createTask(prompt: string): Promise<AgentTask> {
+export async function listProjects(): Promise<AgentProject[]> {
+  const response = await fetch("/api/projects");
+  const payload = await readPayload<{ projects?: AgentProject[] }>(response);
+  return response.ok ? (payload.projects ?? []) : [];
+}
+
+export async function createProject(name: string): Promise<AgentProject> {
+  const response = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const payload = await readPayload<{ project?: AgentProject }>(response);
+
+  if (!response.ok || !payload.project) {
+    throw new Error(payload.error ?? "项目创建失败");
+  }
+
+  return payload.project;
+}
+
+export async function renameProject(projectId: string, name: string): Promise<{ project: AgentProject; tasks: AgentTask[] }> {
+  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const payload = await readPayload<{ project?: AgentProject; tasks?: AgentTask[] }>(response);
+
+  if (!response.ok || !payload.project) {
+    throw new Error(payload.error ?? "项目重命名失败");
+  }
+
+  return { project: payload.project, tasks: payload.tasks ?? [] };
+}
+
+export async function createTask(prompt: string, projectId?: string): Promise<AgentTask> {
   const response = await fetch("/api/tasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, agent: "general" }),
+    body: JSON.stringify({ prompt, agent: "general", projectId }),
   });
   const payload = await readPayload<{ task?: AgentTask }>(response);
 
   if (!response.ok || !payload.task) {
     throw new Error(payload.error ?? "任务创建失败");
+  }
+
+  return payload.task;
+}
+
+export async function renameTask(taskId: string, title: string): Promise<AgentTask> {
+  const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  const payload = await readPayload<{ task?: AgentTask }>(response);
+
+  if (!response.ok || !payload.task) {
+    throw new Error(payload.error ?? "会话重命名失败");
   }
 
   return payload.task;

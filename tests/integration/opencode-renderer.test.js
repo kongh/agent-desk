@@ -140,3 +140,36 @@ test("describes SDK prompt result as assistant transcript", () => {
   assert.equal(model.meta.modelID, "qwen-plus");
   assert.equal(model.meta.tokens.total, 100);
 });
+
+test("describes OpenCode message part delta events", () => {
+  const model = describeOpenCodeEvent({
+    type: "opencode-raw",
+    status: "running",
+    rawType: "message.part.delta",
+    timestamp: "2026-06-28T10:00:00.000Z",
+    raw: {
+      type: "message.part.delta",
+      properties: {
+        field: "text",
+        delta: "hello",
+      },
+    },
+  });
+
+  assert.equal(model.kind, "text_delta");
+  assert.equal(model.text, "hello");
+});
+
+test("describes OpenCode lifecycle events as hidden", () => {
+  for (const rawType of ["server.connected", "session.updated", "message.updated", "plugin.added", "catalog.updated", "session.diff"]) {
+    const model = describeOpenCodeEvent({
+      type: "opencode-raw",
+      status: "running",
+      rawType,
+      timestamp: "2026-06-28T10:00:00.000Z",
+      raw: { type: rawType },
+    });
+
+    assert.equal(model.kind, "hidden");
+  }
+});

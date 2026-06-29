@@ -14,6 +14,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { cn } from "@/lib/utils";
+import { normalizePipedMarkdownTables } from "@/runtime/markdown-preprocess";
 
 const MarkdownTextImpl = () => {
   return (
@@ -21,7 +22,7 @@ const MarkdownTextImpl = () => {
       remarkPlugins={[remarkGfm]}
       className="aui-md"
       components={defaultComponents}
-      defer
+      preprocess={normalizePipedMarkdownTables}
     />
   );
 };
@@ -183,18 +184,20 @@ const defaultComponents = memoizeMarkdownComponents({
     />
   ),
   table: ({ className, ...props }) => (
-    <table
-      className={cn(
-        "aui-md-table my-3 w-full border-separate border-spacing-0 overflow-y-auto",
-        className,
-      )}
-      {...props}
-    />
+    <div className="aui-md-table-wrapper my-3 max-w-full overflow-x-auto rounded-xl border border-[#d7dcde]">
+      <table
+        className={cn(
+          "aui-md-table w-max min-w-full border-separate border-spacing-0 text-sm",
+          className,
+        )}
+        {...props}
+      />
+    </div>
   ),
   th: ({ className, ...props }) => (
     <th
       className={cn(
-        "aui-md-th bg-muted px-3 py-1.5 text-start font-medium first:rounded-ss-lg last:rounded-se-lg [[align=center]]:text-center [[align=right]]:text-right",
+        "aui-md-th bg-[#f7f8f8] px-3 py-2 text-start font-medium whitespace-nowrap [[align=center]]:text-center [[align=right]]:text-right",
         className,
       )}
       {...props}
@@ -203,7 +206,7 @@ const defaultComponents = memoizeMarkdownComponents({
   td: ({ className, ...props }) => (
     <td
       className={cn(
-        "aui-md-td border-muted-foreground/20 border-s border-b px-3 py-1.5 text-start last:border-e [[align=center]]:text-center [[align=right]]:text-right",
+        "aui-md-td border-[#d7dcde] border-s border-t px-3 py-2 text-start align-top whitespace-nowrap first:border-s-0 [[align=center]]:text-center [[align=right]]:text-right [&_a]:whitespace-nowrap",
         className,
       )}
       {...props}
@@ -212,7 +215,7 @@ const defaultComponents = memoizeMarkdownComponents({
   tr: ({ className, ...props }) => (
     <tr
       className={cn(
-        "aui-md-tr m-0 border-b p-0 first:border-t [&:last-child>td:first-child]:rounded-es-lg [&:last-child>td:last-child]:rounded-ee-lg",
+        "aui-md-tr m-0 p-0 first:[&>td]:border-t-0 first:[&>th]:border-t-0",
         className,
       )}
       {...props}

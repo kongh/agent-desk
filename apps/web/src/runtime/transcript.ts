@@ -1,4 +1,4 @@
-import type { AgentSessionView, AgentTask, MessagePart, TaskEvent, TaskStatus, TranscriptMessage } from "../types";
+import type { AgentSessionView, AgentTask, MessagePart, RunAction, TaskEvent, TaskStatus, TranscriptMessage } from "../types";
 import { describeOpenCodeEvent } from "./opencode-renderer.ts";
 
 export function createEmptySession(): AgentSessionView {
@@ -129,19 +129,120 @@ function userMessages(prompt: string, createdAt?: string, messages: AgentTask["m
 function upsertAssistantRunMessage(messages: TranscriptMessage[], event: TaskEvent): TranscriptMessage[] {
   const runMessage = findRunMessage(messages, event.messageId);
   const nextParts = applyOpenCodeEvent(runMessage?.parts ?? [], event);
+  const nextRunSummary = applyRunSummaryEvent(runMessage?.runSummary, event);
 
   if (!runMessage) {
     return [
       ...messages,
       {
         ...rawStreamMessage(nextParts, event.messageId ?? localMessageId()),
+        runSummary: nextRunSummary,
       },
     ];
   }
 
   return messages.map((message) =>
-    message.id === runMessage.id ? { ...message, parts: nextParts } : message,
+    message.id === runMessage.id ? { ...message, parts: nextParts, runSummary: nextRunSummary } : message,
   );
+}
+
+function applyRunSummaryEvent(summary: TranscriptMessage["runSummary"] | undefined, event: TaskEvent) {
+  const startedAt = summary?.startedAt ?? event.timestamp;
+  const completedAt = event.status === "completed" || event.status === "failed" ? event.timestamp : summary?.completedAt;
+  const next = {
+    status: event.status,
+    startedAt,
+    completedAt,
+    actions: [...(summary?.actions ?? [])],
+  };
+  const action = eventToRunAction(event);
+  if (action && !next.actions.some((item) => item.id === action.id)) {
+    next.actions.push(action);
+  }
+
+  return next;
+}
+
+function eventToRunAction(event: TaskEvent): RunAction | undefined {
+  const model = describeOpenCodeEvent(event);
+
+  if (model.kind === "tool") {
+    return {
+      id: event.id ?? `${event.rawType ?? "tool"}-${event.timestamp}`,
+      kind: toolActionKind(model.tool),
+      label: toolActionLabel(model.tool),
+      target: extractActionTarget(model.input),
+      status: model.status ?? event.status,
+      rawType: model.rawType,
+    };
+  }
+
+  if (model.kind === "file") {
+    return {
+      id: event.id ?? `file-${event.timestamp}`,
+      kind: "write_file",
+      label: "写入文件",
+      target: model.file,
+      status: event.status,
+      rawType: model.rawType,
+    };
+  }
+
+  if (model.kind === "permission") {
+    return {
+      id: event.id ?? `permission-${event.timestamp}`,
+      kind: "permission",
+      label: "权限请求",
+      target: model.title,
+      status: event.status,
+      rawType: model.rawType,
+    };
+  }
+
+  if (model.kind === "error") {
+    return {
+      id: event.id ?? `error-${event.timestamp}`,
+      kind: "error",
+      label: "执行出错",
+      target: model.message,
+      status: "failed",
+      rawType: model.rawType,
+    };
+  }
+
+  return undefined;
+}
+
+function toolActionKind(toolName: string): RunAction["kind"] {
+  const normalized = toolName.toLowerCase();
+  if (normalized.includes("websearch") || normalized.includes("web_search") || normalized.includes("search")) return "web_search";
+  if (normalized.includes("webfetch") || normalized.includes("fetch")) return "web_fetch";
+  if (normalized.includes("write") || normalized.includes("edit")) return "write_file";
+  if (normalized.includes("read")) return "read_file";
+  if (normalized.includes("bash") || normalized.includes("command")) return "command";
+  return "tool";
+}
+
+function toolActionLabel(toolName: string) {
+  const kind = toolActionKind(toolName);
+  const labels: Record<RunAction["kind"], string> = {
+    web_search: "搜索网页",
+    web_fetch: "读取网页",
+    read_file: "读取文件",
+    write_file: "写入文件",
+    command: "运行命令",
+    permission: "权限请求",
+    error: "执行出错",
+    tool: "工具调用",
+  };
+  return labels[kind];
+}
+
+function extractActionTarget(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const target = record.file ?? record.path ?? record.filePath ?? record.url ?? record.query ?? record.q ?? record.command;
+  return typeof target === "string" && target.length > 0 ? target : undefined;
 }
 
 function findRunMessage(messages: TranscriptMessage[], messageId?: string) {
@@ -158,30 +259,33 @@ function findRunMessage(messages: TranscriptMessage[], messageId?: string) {
 function applyOpenCodeEvent(parts: MessagePart[], event: TaskEvent): MessagePart[] {
   const model = describeOpenCodeEvent(event);
 
+  if (model.kind === "hidden") {
+    return parts;
+  }
+
   if (model.kind === "text_delta") {
     return appendAssistantText(parts, model.text);
   }
 
   if (model.kind === "prompt_result") {
+    const hasStreamedText = parts.some((part) => part.type === "assistant_text");
     return [
       ...parts,
-      ...(model.text ? [{ type: "assistant_text" as const, text: model.text }] : []),
+      ...(!hasStreamedText && model.text ? [{ type: "assistant_text" as const, text: model.text }] : []),
       ...model.reasoning.map((text) => ({ type: "reasoning" as const, text })),
     ];
   }
 
   if (model.kind === "tool") {
-    return [
-      ...parts,
-      {
-        type: "tool",
-        tool: model.tool,
-        status: model.status,
-        input: model.input,
-        output: model.output,
-        raw: model.raw,
-      },
-    ];
+    return upsertToolPart(parts, {
+      type: "tool",
+      id: model.id ?? stableToolPartId(model.tool, model.input),
+      tool: model.tool,
+      status: model.status,
+      input: model.input,
+      output: model.output,
+      raw: model.raw,
+    });
   }
 
   if (model.kind === "file") {
@@ -193,18 +297,37 @@ function applyOpenCodeEvent(parts: MessagePart[], event: TaskEvent): MessagePart
   }
 
   if (model.kind === "session_status") {
-    return [...parts, { type: "session_status", label: model.label, raw: model.raw }];
+    return parts;
   }
 
   if (model.kind === "error") {
     return [...parts, { type: "error", message: model.message }];
   }
 
-  return [...parts, { type: "raw_json", label: model.rawType, raw: model.raw }];
+  return parts;
 }
 
 function isSilentEvent(event: TaskEvent) {
-  return event.rawType === "sdk.session.create";
+  return event.rawType === "sdk.session.create" || event.rawType === "sdk.event.subscribe.observed";
+}
+
+function upsertToolPart(parts: MessagePart[], nextTool: Extract<MessagePart, { type: "tool" }>): MessagePart[] {
+  const existingIndex = parts.findIndex((part) => part.type === "tool" && part.id && nextTool.id && part.id === nextTool.id);
+  if (existingIndex === -1) {
+    return [...parts, nextTool];
+  }
+
+  return parts.map((part, index) => (index === existingIndex ? { ...part, ...nextTool } : part));
+}
+
+function stableToolPartId(tool: string, input: unknown) {
+  return "tool:" + tool + ":" + stableStringify(input);
+}
+
+function stableStringify(value: unknown) {
+  if (value === undefined) return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
 }
 
 function appendAssistantText(parts: MessagePart[], text: string): MessagePart[] {
@@ -221,6 +344,7 @@ function rawStreamMessage(parts: MessagePart[], id: string): TranscriptMessage {
     id: assistantRunId(id),
     role: "assistant",
     parts,
+    runSummary: { status: "running", actions: [] },
   };
 }
 

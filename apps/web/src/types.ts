@@ -20,10 +20,17 @@ export type TaskWorkspace = {
   path?: string;
 };
 
+export type AgentProject = {
+  id: string;
+  name: string;
+};
+
 export type AgentTask = {
   id: string;
   prompt: string;
+  title?: string;
   agent: string;
+  project?: AgentProject;
   workspace?: TaskWorkspace | string;
   status: TaskStatus;
   messages?: Array<{
@@ -48,13 +55,30 @@ export type TranscriptMessage = {
   role: "user" | "assistant";
   parts: MessagePart[];
   createdAt?: string;
+  runSummary?: RunSummary;
+};
+
+export type RunSummary = {
+  status: TaskStatus;
+  startedAt?: string;
+  completedAt?: string;
+  actions: RunAction[];
+};
+
+export type RunAction = {
+  id: string;
+  kind: "web_search" | "web_fetch" | "read_file" | "write_file" | "command" | "permission" | "error" | "tool";
+  label: string;
+  target?: string;
+  status?: TaskStatus;
+  rawType?: string;
 };
 
 export type MessagePart =
   | { type: "text"; text: string }
   | { type: "assistant_text"; text: string }
   | { type: "reasoning"; text: string }
-  | { type: "tool"; tool: string; status?: string; input?: unknown; output?: unknown; raw?: unknown }
+  | { type: "tool"; id?: string; tool: string; status?: string; input?: unknown; output?: unknown; raw?: unknown }
   | { type: "file"; file: string; raw?: unknown }
   | { type: "permission"; title: string; raw?: unknown }
   | { type: "session_status"; label: string; raw?: unknown }

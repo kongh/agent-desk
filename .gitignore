@@ -5,3 +5,5 @@ output/
 .DS_Store
 npm-debug.log
 apps/web/dist
+
+data/*.tmp

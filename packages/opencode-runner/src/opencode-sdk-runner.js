@@ -28,7 +28,7 @@ export class OpenCodeSdkRunner {
 
     const { client, sessionId } = await this.getOrCreateSession({ taskId, prompt, workspace, emit });
 
-    const eventSubscription = subscribeToOpenCodeEvents({
+    const eventSubscription = await subscribeToOpenCodeEvents({
       client,
       taskId,
       sessionId,
@@ -130,8 +130,8 @@ export class OpenCodeSdkRunner {
   }
 }
 
-function subscribeToOpenCodeEvents({ client, taskId, sessionId, workspace, emit }) {
-  if (!client.global?.event) {
+async function subscribeToOpenCodeEvents({ client, taskId, sessionId, workspace, emit }) {
+  if (!client.event?.subscribe) {
     return noopSubscription();
   }
 
@@ -139,10 +139,10 @@ function subscribeToOpenCodeEvents({ client, taskId, sessionId, workspace, emit 
   let stream;
 
   try {
-    stream = client.global.event({
+    stream = (await client.event.subscribe({
       signal: abortController.signal,
       sseMaxRetryAttempts: 1,
-    })?.stream;
+    }))?.stream;
   } catch {
     return noopSubscription();
   }
@@ -153,9 +153,25 @@ function subscribeToOpenCodeEvents({ client, taskId, sessionId, workspace, emit 
 
   const drainPromise = (async () => {
     for await (const openCodeEvent of stream) {
-      if (belongsToWorkspace(openCodeEvent, workspace.path) && belongsToSession(openCodeEvent?.payload, sessionId)) {
+      const payload = getOpenCodeEventPayload(openCodeEvent);
+      const workspaceMatched = belongsToWorkspace(openCodeEvent, workspace.path);
+      const sessionMatched = belongsToSession(payload, sessionId);
+
+      await emit(rawEvent({
+        rawType: "sdk.event.subscribe.observed",
+        raw: {
+          diagnostics: {
+            workspaceMatched,
+            sessionMatched,
+            payloadType: payload?.type ?? "opencode.event",
+          },
+          event: openCodeEvent,
+        },
+      }));
+
+      if (workspaceMatched && sessionMatched) {
         await emit(rawEvent({
-          rawType: openCodeEvent.payload?.type ?? "opencode.event",
+          rawType: payload?.type ?? "opencode.event",
           raw: openCodeEvent,
           status: eventStatus(openCodeEvent),
         }));
@@ -184,6 +200,18 @@ function rawEvent({ rawType, raw, status = "running" }) {
   };
 }
 
+function getOpenCodeEventPayload(openCodeEvent) {
+  if (openCodeEvent?.payload?.type) {
+    return openCodeEvent.payload;
+  }
+
+  if (openCodeEvent?.type) {
+    return openCodeEvent;
+  }
+
+  return undefined;
+}
+
 function belongsToWorkspace(openCodeEvent, workspacePath) {
   return !openCodeEvent?.directory || openCodeEvent.directory === workspacePath;
 }
@@ -199,7 +227,7 @@ function belongsToSession(payload, sessionId) {
 }
 
 function eventStatus(openCodeEvent) {
-  const payload = openCodeEvent?.payload;
+  const payload = getOpenCodeEventPayload(openCodeEvent);
   const status = payload?.properties?.part?.state?.status ?? payload?.status;
 
   if (status === "error" || payload?.type === "session.error") {

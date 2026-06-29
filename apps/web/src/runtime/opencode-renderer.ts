@@ -19,6 +19,7 @@ export type OpenCodeRenderModel =
   | {
       kind: "tool";
       rawType: string;
+      id?: string;
       tool: string;
       status?: string;
       input?: unknown;
@@ -50,6 +51,11 @@ export type OpenCodeRenderModel =
       raw: unknown;
     }
   | {
+      kind: "hidden";
+      rawType: string;
+      raw: unknown;
+    }
+  | {
       kind: "raw";
       rawType: string;
       raw: unknown;
@@ -72,6 +78,32 @@ export function describeOpenCodeEvent(event: TaskEvent): OpenCodeRenderModel {
     }
   }
 
+  if (payload?.type === "message.part.delta") {
+    const delta = payload.properties?.delta;
+    if (payload.properties?.field === "text" && typeof delta === "string" && delta.length > 0) {
+      return {
+        kind: "text_delta",
+        rawType,
+        text: delta,
+        raw,
+      };
+    }
+
+    return {
+      kind: "hidden",
+      rawType,
+      raw,
+    };
+  }
+
+  if (isHiddenLifecycleEvent(rawType)) {
+    return {
+      kind: "hidden",
+      rawType,
+      raw,
+    };
+  }
+
   if (payload?.type === "message.part.updated") {
     const delta = payload.properties?.delta;
     if (typeof delta === "string" && delta.length > 0) {
@@ -88,6 +120,7 @@ export function describeOpenCodeEvent(event: TaskEvent): OpenCodeRenderModel {
       return {
         kind: "tool",
         rawType,
+        id: stringOrUndefined(part.id),
         tool: String(part.tool ?? "tool"),
         status: stringOrUndefined(part.state?.status),
         input: part.state?.input,
@@ -139,6 +172,21 @@ export function describeOpenCodeEvent(event: TaskEvent): OpenCodeRenderModel {
     rawType,
     raw,
   };
+}
+
+function isHiddenLifecycleEvent(rawType: string) {
+  return new Set([
+    "server.connected",
+    "session.next.agent.switched",
+    "session.next.model.switched",
+    "message.updated",
+    "session.updated",
+    "session.diff",
+    "plugin.added",
+    "reference.updated",
+    "integration.updated",
+    "catalog.updated",
+  ]).has(rawType);
 }
 
 function formatError(raw: unknown) {
@@ -241,10 +289,12 @@ type OpenCodePayload = {
   properties?: {
     title?: unknown;
     delta?: unknown;
+    field?: unknown;
     file?: unknown;
     status?: unknown;
     error?: unknown;
     part?: {
+      id?: unknown;
       type?: unknown;
       tool?: unknown;
       state?: {

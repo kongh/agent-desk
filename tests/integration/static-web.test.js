@@ -36,3 +36,83 @@ test("api server serves built web assets from a configurable web root", async ()
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("api server creates tasks with default project metadata", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-api-project-test-"));
+  const server = createApiServer({
+    workspaceRoot: join(root, "workspaces"),
+    webRoot: join(root, "dist"),
+    runner: { async runResearchTask() {} },
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const response = await fetch(`${baseUrl}/api/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "验证项目元数据", agent: "general" }),
+    });
+    const payload = await response.json();
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(payload.task.project, { id: "agent-desk", name: "agent-desk" });
+    assert.equal(payload.task.workspace.title, "验证项目元数据");
+  } finally {
+    server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("api server manages projects and session titles", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agent-api-project-management-test-"));
+  const server = createApiServer({
+    workspaceRoot: join(root, "workspaces"),
+    webRoot: join(root, "dist"),
+    runner: { async runResearchTask() {} },
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "知识图谱" }),
+    });
+    const projectPayload = await projectResponse.json();
+
+    assert.equal(projectResponse.status, 201);
+    assert.equal(projectPayload.project.name, "知识图谱");
+
+    const taskResponse = await fetch(`${baseUrl}/api/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "新会话", projectId: projectPayload.project.id }),
+    });
+    const taskPayload = await taskResponse.json();
+    assert.equal(taskPayload.task.project.id, projectPayload.project.id);
+
+    const renameTaskResponse = await fetch(`${baseUrl}/api/tasks/${taskPayload.task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "重命名会话" }),
+    });
+    const renameTaskPayload = await renameTaskResponse.json();
+    assert.equal(renameTaskPayload.task.title, "重命名会话");
+
+    const renameProjectResponse = await fetch(`${baseUrl}/api/projects/${projectPayload.project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Knowledge Graphs" }),
+    });
+    const renameProjectPayload = await renameProjectResponse.json();
+    assert.equal(renameProjectPayload.project.name, "Knowledge Graphs");
+    assert.equal(renameProjectPayload.tasks[0].project.name, "Knowledge Graphs");
+  } finally {
+    server.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

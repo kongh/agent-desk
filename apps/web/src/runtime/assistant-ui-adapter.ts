@@ -2,24 +2,33 @@ import type { ThreadMessageLike } from "@assistant-ui/react";
 import type { ReadonlyJSONObject, ReadonlyJSONValue } from "assistant-stream/utils";
 
 import type { MessagePart, TranscriptMessage } from "../types";
+import { visiblePartEntries } from "./intermediate-process.ts";
 
 export function toAssistantUiMessages(messages: TranscriptMessage[]): ThreadMessageLike[] {
   return messages.map((message) => ({
     id: message.id,
     role: message.role,
     createdAt: message.createdAt ? new Date(message.createdAt) : undefined,
-    status: message.role === "assistant" && message.parts.length === 0
-      ? { type: "running" as const }
-      : message.role === "assistant"
-        ? { type: "complete" as const, reason: "stop" as const }
-        : undefined,
-    content: message.parts.flatMap(toAssistantUiParts),
+    status: assistantMessageStatus(message),
+    content: visiblePartEntries(message).flatMap(({ part, index }) => toAssistantUiParts(part, message.id, index)),
   }));
+}
+
+function assistantMessageStatus(message: TranscriptMessage): ThreadMessageLike["status"] {
+  if (message.role !== "assistant") {
+    return undefined;
+  }
+
+  if (message.runSummary?.status === "running" || message.runSummary?.status === "queued" || message.parts.length === 0) {
+    return { type: "running" as const };
+  }
+
+  return { type: "complete" as const, reason: "stop" as const };
 }
 
 type AssistantUiPart = Exclude<ThreadMessageLike["content"], string>[number];
 
-function toAssistantUiParts(part: MessagePart): AssistantUiPart[] {
+function toAssistantUiParts(part: MessagePart, messageId: string, partIndex: number): AssistantUiPart[] {
   if (part.type === "text" || part.type === "assistant_text") {
     return [{ type: "text", text: part.text }];
   }
@@ -32,7 +41,7 @@ function toAssistantUiParts(part: MessagePart): AssistantUiPart[] {
     return [
       {
         type: "tool-call",
-        toolCallId: `tool-${part.tool}-${stableHash(part.raw ?? part.input ?? part.output ?? "")}`,
+        toolCallId: part.id ?? createToolCallId(`tool-${part.tool}`, messageId, partIndex, part.raw ?? part.input ?? part.output ?? ""),
         toolName: part.tool,
         args: toRecord(part.input),
         argsText: stringify(part.input),
@@ -42,15 +51,42 @@ function toAssistantUiParts(part: MessagePart): AssistantUiPart[] {
   }
 
   if (part.type === "file") {
-    return [{ type: "text", text: `文件变更：${part.file}` }];
+    return [
+      {
+        type: "tool-call",
+        toolCallId: createToolCallId("file", messageId, partIndex, part.file),
+        toolName: "file.edited",
+        args: { file: part.file },
+        argsText: stringify({ file: part.file }),
+        result: part.raw,
+      },
+    ];
   }
 
   if (part.type === "permission") {
-    return [{ type: "text", text: `权限请求：${part.title}` }];
+    return [
+      {
+        type: "tool-call",
+        toolCallId: createToolCallId("permission", messageId, partIndex, part.title),
+        toolName: "permission.request",
+        args: { title: part.title },
+        argsText: stringify({ title: part.title }),
+        result: part.raw,
+      },
+    ];
   }
 
   if (part.type === "error") {
-    return [{ type: "text", text: part.message }];
+    return [
+      {
+        type: "tool-call",
+        toolCallId: createToolCallId("error", messageId, partIndex, part.message),
+        toolName: "opencode.error",
+        args: {},
+        argsText: "",
+        result: { message: part.message },
+      },
+    ];
   }
 
   if (part.type === "session_status") {
@@ -58,10 +94,31 @@ function toAssistantUiParts(part: MessagePart): AssistantUiPart[] {
   }
 
   if (part.type === "raw_json") {
-    return [{ type: "text", text: `\`\`\`json\n${stringify(part.raw)}\n\`\`\`` }];
+    return [
+      {
+        type: "tool-call",
+        toolCallId: createToolCallId("raw", messageId, partIndex, part.raw ?? part.label),
+        toolName: part.label || "opencode.raw",
+        args: {},
+        argsText: "",
+        result: part.raw,
+      },
+    ];
   }
 
-  return [{ type: "text", text: `\`\`\`json\n${stringify(part.event.raw ?? part.event)}\n\`\`\`` }];
+  return [
+    {
+      type: "tool-call",
+      toolCallId: createToolCallId("event", messageId, partIndex, part.event.raw ?? part.event),
+      toolName: part.event.rawType ?? part.event.type ?? "opencode.event",
+      args: {},
+      argsText: "",
+      result: part.event.raw ?? part.event,
+    },
+  ];
+}
+function createToolCallId(prefix: string, messageId: string, partIndex: number, value: unknown) {
+  return `${prefix}-${messageId}-${partIndex}-${stableHash(value)}`;
 }
 
 function toRecord(value: unknown): ReadonlyJSONObject {

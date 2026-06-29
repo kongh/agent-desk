@@ -18,8 +18,8 @@ test("OpenCodeSdkRunner creates a session with an SDK client bound to the task w
       createClient: (config) => {
         calls.push(["createClient", config]);
         return {
-          global: {
-            event: () => ({
+          event: {
+            subscribe: async () => ({
               stream: (async function* () {})(),
             }),
           },
@@ -95,9 +95,9 @@ test("OpenCodeSdkRunner forwards OpenCode SSE events into task timeline events",
     const runner = new OpenCodeSdkRunner({
       baseUrl: "http://127.0.0.1:4096",
       createClient: () => ({
-        global: {
-          event: () => ({
-            stream: (async function* () {
+        event: {
+            subscribe: async () => ({
+              stream: (async function* () {
               yield {
                 directory: workspace.path,
                 payload: {
@@ -144,15 +144,88 @@ test("OpenCodeSdkRunner forwards OpenCode SSE events into task timeline events",
       onEvent: (event) => events.push(event),
     });
 
+    const visibleEvents = events.filter((event) => event.rawType !== "sdk.event.subscribe.observed");
     assert.deepEqual(
-      events.map((event) => event.type),
+      visibleEvents.map((event) => event.type),
       ["opencode-raw", "opencode-raw", "opencode-raw", "opencode-raw"],
     );
-    assert.equal(events[1].rawType, "message.part.updated");
-    assert.equal(events[1].raw.payload.type, "message.part.updated");
-    assert.equal(events[1].raw.payload.properties.part.tool, "write");
-    assert.equal(events[2].rawType, "file.edited");
-    assert.equal(events[2].raw.payload.type, "file.edited");
+    assert.equal(visibleEvents[1].rawType, "message.part.updated");
+    assert.equal(visibleEvents[1].raw.payload.type, "message.part.updated");
+    assert.equal(visibleEvents[1].raw.payload.properties.part.tool, "write");
+    assert.equal(visibleEvents[2].rawType, "file.edited");
+    assert.equal(visibleEvents[2].raw.payload.type, "file.edited");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+
+
+test("OpenCodeSdkRunner records observed global SSE events before filtering", async () => {
+  const root = await mkdtemp(join(tmpdir(), "opencode-sdk-observed-events-test-"));
+
+  try {
+    const workspace = await createTaskWorkspace(root, "SDK 诊断事件验证");
+    const runner = new OpenCodeSdkRunner({
+      createClient: () => ({
+        event: {
+            subscribe: async () => ({
+              stream: (async function* () {
+              yield {
+                directory: "/other/workspace",
+                payload: {
+                  type: "message.part.updated",
+                  properties: {
+                    part: {
+                      type: "tool",
+                      sessionID: "other_session",
+                      tool: "websearch",
+                    },
+                  },
+                },
+              };
+              yield {
+                directory: workspace.path,
+                payload: {
+                  type: "message.part.updated",
+                  properties: {
+                    part: {
+                      type: "tool",
+                      sessionID: "ses_observed",
+                      tool: "write",
+                    },
+                  },
+                },
+              };
+            })(),
+          }),
+        },
+        session: {
+          create: async () => ({ data: { id: "ses_observed" } }),
+          prompt: async () => ({ data: { info: { id: "msg_observed" }, parts: [] } }),
+        },
+      }),
+    });
+    const events = [];
+
+    await runner.runResearchTask({
+      taskId: "task_sdk_observed",
+      prompt: "SDK 诊断事件验证",
+      workspace,
+      messageId: "msg_user_observed",
+      onEvent: (event) => events.push(event),
+    });
+
+    const observed = events.filter((event) => event.rawType === "sdk.event.subscribe.observed");
+    assert.equal(observed.length, 2);
+    assert.deepEqual(
+      observed.map((event) => event.raw.diagnostics),
+      [
+        { workspaceMatched: false, sessionMatched: false, payloadType: "message.part.updated" },
+        { workspaceMatched: true, sessionMatched: true, payloadType: "message.part.updated" },
+      ],
+    );
+    assert.equal(events.some((event) => event.rawType === "message.part.updated"), true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -166,9 +239,9 @@ test("OpenCodeSdkRunner reuses the same OpenCode session for follow-up prompts i
     const workspace = await createTaskWorkspace(root, "SDK 多轮会话验证");
     const runner = new OpenCodeSdkRunner({
       createClient: () => ({
-        global: {
-          event: () => ({
-            stream: (async function* () {})(),
+        event: {
+            subscribe: async () => ({
+              stream: (async function* () {})(),
           }),
         },
         session: {
@@ -223,9 +296,9 @@ test("OpenCodeSdkRunner passes an explicit OpenCode Zen DeepSeek Flash model whe
         modelID: "deepseek-v4-flash-free",
       },
       createClient: () => ({
-        global: {
-          event: () => ({
-            stream: (async function* () {})(),
+        event: {
+            subscribe: async () => ({
+              stream: (async function* () {})(),
           }),
         },
         session: {
@@ -261,9 +334,9 @@ test("OpenCodeSdkRunner fails when OpenCode returns a prompt error", async () =>
     const workspace = await createTaskWorkspace(root, "SDK 错误验证");
     const runner = new OpenCodeSdkRunner({
       createClient: () => ({
-        global: {
-          event: () => ({
-            stream: (async function* () {})(),
+        event: {
+            subscribe: async () => ({
+              stream: (async function* () {})(),
           }),
         },
         session: {
@@ -308,9 +381,9 @@ test("OpenCodeSdkRunner aborts the prompt when it exceeds the configured timeout
     const runner = new OpenCodeSdkRunner({
       promptTimeoutMs: 10,
       createClient: () => ({
-        global: {
-          event: () => ({
-            stream: (async function* () {})(),
+        event: {
+            subscribe: async () => ({
+              stream: (async function* () {})(),
           }),
         },
         session: {
