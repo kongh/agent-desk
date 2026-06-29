@@ -1,0 +1,9 @@
+services:
+  api:
+    image: business-agent-api:local
+
+  web:
+    image: business-agent-web:local
+
+  opencode:
+    image: business-agent-opencode:local

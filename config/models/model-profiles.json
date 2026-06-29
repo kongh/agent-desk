@@ -1,0 +1,10 @@
+{
+  "default": {
+    "provider": "openrouter",
+    "model": "qwen/qwen3.7-max"
+  },
+  "research": {
+    "provider": "openrouter",
+    "model": "qwen/qwen3.7-max"
+  }
+}

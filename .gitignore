@@ -1,0 +1,7 @@
+node_modules/
+data/tasks.json
+workspaces/
+output/
+.DS_Store
+npm-debug.log
+apps/web/dist

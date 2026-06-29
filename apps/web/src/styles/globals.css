@@ -1,0 +1,131 @@
+@import "tailwindcss";
+@import "tw-shimmer";
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.agent-markdown {
+  overflow-wrap: anywhere;
+}
+
+.agent-markdown > * + * {
+  margin-top: 0.85rem;
+}
+
+.agent-markdown h1,
+.agent-markdown h2,
+.agent-markdown h3 {
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.agent-markdown h1 {
+  font-size: 1.35rem;
+}
+
+.agent-markdown h2 {
+  font-size: 1.15rem;
+}
+
+.agent-markdown h3 {
+  font-size: 1rem;
+}
+
+.agent-markdown strong {
+  font-weight: 750;
+}
+
+.agent-markdown ul,
+.agent-markdown ol {
+  padding-left: 1.35rem;
+}
+
+.agent-markdown ul {
+  list-style: disc;
+}
+
+.agent-markdown ol {
+  list-style: decimal;
+}
+
+.agent-markdown li + li {
+  margin-top: 0.35rem;
+}
+
+.agent-markdown a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.agent-markdown code {
+  border-radius: 0.45rem;
+  background: #eceeee;
+  padding: 0.08rem 0.4rem;
+  font-size: 0.9em;
+}
+
+.agent-markdown pre {
+  max-width: 100%;
+  overflow: auto;
+  border-radius: 0.75rem;
+  border: 1px solid #e1e4e5;
+  background: #ededed;
+  padding: 0.9rem 1rem;
+  color: #202124;
+}
+
+.agent-markdown pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.agent-markdown blockquote {
+  border-left: 3px solid #d8dcdd;
+  padding-left: 1rem;
+  color: #596063;
+}
+
+.agent-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  border-collapse: collapse;
+}
+
+.agent-markdown th,
+.agent-markdown td {
+  border: 1px solid #e1e4e5;
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+}
+
+.agent-markdown th {
+  background: #f4f6f6;
+  font-weight: 700;
+}

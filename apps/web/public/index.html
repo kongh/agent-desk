@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentDesk 智能体工作台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="会话列表">
+        <div class="brand">
+          <span class="brand-mark">A</span>
+          <div>
+            <strong>AgentDesk</strong>
+            <small>OpenCode Runtime</small>
+          </div>
+        </div>
+
+        <button id="newChatButton" class="new-chat" type="button">新对话</button>
+
+        <section class="side-section">
+          <div class="section-title">项目</div>
+          <div class="project-tree">
+            <button class="project active" type="button">
+              <span>agent-desk</span>
+              <small>当前工作区</small>
+            </button>
+            <div class="project-conversations">
+              <div class="project-subtitle">项目会话</div>
+              <div id="taskList" class="conversation-list">
+                <p class="muted">暂无对话</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <section class="chat-pane" aria-label="Agent 对话">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">General Agent</p>
+            <h1>我们应该在 AgentDesk 中构建什么？</h1>
+          </div>
+          <div class="runtime-status">
+            <span id="statusDot" class="dot idle"></span>
+            <div>
+              <strong id="statusText">待命</strong>
+              <small id="statusHint">发送消息后会创建一个执行任务</small>
+            </div>
+          </div>
+        </header>
+
+        <div id="messageList" class="message-list">
+          <article class="message assistant">
+            <div class="avatar">A</div>
+            <div class="bubble">
+              <p>你好，我是 AgentDesk 智能体工作台。你可以直接描述业务目标、要生成的材料、要调研的问题，或希望我在工作区完成的任务。</p>
+            </div>
+          </article>
+        </div>
+
+        <footer class="composer" aria-label="发送消息">
+          <textarea
+            id="prompt"
+            rows="3"
+            placeholder="输入你的目标，例如：调研企业 AI 助手在知识管理场景中的产品机会"
+          ></textarea>
+          <div class="composer-actions">
+            <span class="hint">当前每条消息会映射为一次 OpenCode 任务执行。</span>
+            <button id="sendButton" class="primary" type="button">发送</button>
+          </div>
+        </footer>
+      </section>
+
+      <aside class="inspector" aria-label="执行详情">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Run</p>
+              <h2>执行轨迹</h2>
+            </div>
+            <span id="eventCount" class="badge">0</span>
+          </div>
+          <ol id="timeline" class="timeline">
+            <li class="empty">发送消息后会显示执行步骤</li>
+          </ol>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Output</p>
+              <h2>产物预览</h2>
+            </div>
+            <button id="refreshReport" class="secondary" type="button" disabled>刷新</button>
+          </div>
+          <pre id="report" class="report">暂无产物。</pre>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Workspace</p>
+              <h2>文件</h2>
+            </div>
+            <span id="fileCount" class="badge">0</span>
+          </div>
+          <div id="fileList" class="file-list">
+            <p class="muted">暂无文件。</p>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

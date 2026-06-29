@@ -1,0 +1,45 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    env_file:
+      - ../../config/env/.env.example
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 3001
+      AGENT_RUNNER: opencode-sdk
+      OPENCODE_MODEL: opencode/deepseek-v4-flash-free
+      OPENCODE_SERVER_URL: http://opencode:4096
+      OPENCODE_TIMEOUT_MS: 90000
+      TASK_STORE_FILE: /app/data/tasks.json
+      WORKSPACES_DIR: /workspace/workspaces
+    ports:
+      - "3101:3001"
+    volumes:
+      - ../../data:/app/data
+      - ../../workspaces:/workspace/workspaces
+    depends_on:
+      - opencode
+
+  opencode:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.opencode
+    environment:
+      OPENCODE_HOST: 0.0.0.0
+      OPENCODE_PORT: 4096
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "4096:4096"
+    volumes:
+      - ../../workspaces:/workspace/workspaces
+      - opencode-data:/root/.local/share/opencode
+      - opencode-config:/root/.config/opencode
+
+volumes:
+  opencode-data:
+  opencode-config:

@@ -1,0 +1,8 @@
+{
+  "read": "allow",
+  "edit": "ask",
+  "websearch": "ask",
+  "webfetch": "ask",
+  "bash": "ask",
+  "external_directory": "deny"
+}

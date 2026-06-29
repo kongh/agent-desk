@@ -1,0 +1,30 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    env_file:
+      - ../../config/env/.env.example
+    environment:
+      API_HOST: 0.0.0.0
+      WORKSPACES_DIR: /app/workspaces
+      TASK_STORE_FILE: /app/data/tasks.json
+    ports:
+      - "3001:3001"
+    volumes:
+      - ../../workspaces:/app/workspaces
+      - ../../data:/app/data
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+    env_file:
+      - ../../config/env/.env.example
+
+  opencode:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.opencode
+    env_file:
+      - ../../config/env/.env.example
